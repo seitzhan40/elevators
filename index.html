@@ -529,20 +529,25 @@ const MANAGER_PALETTE = [
   '#ef5350','#26c6da','#ffca28','#ff7043',
   '#ab47bc','#66bb6a','#ec407a','#42a5f5'
 ];
+// Цвета фиксированы — назначаются один раз по алфавиту и не меняются
 const MANAGER_COLORS = {};
-let paletteIdx = 0;
+
+function initManagerColors() {
+  const allManagers = [...new Set(ELEVATORS.map(e => e.manager).filter(Boolean))].sort();
+  allManagers.forEach((m, i) => {
+    MANAGER_COLORS[m] = MANAGER_PALETTE[i % MANAGER_PALETTE.length];
+  });
+}
 
 function getManagerColor(manager) {
   if (!manager) return '#4a5568';
+  // If manager not in colors yet (newly added), assign next available color
   if (!MANAGER_COLORS[manager]) {
-    MANAGER_COLORS[manager] = MANAGER_PALETTE[paletteIdx++ % MANAGER_PALETTE.length];
+    const used = Object.keys(MANAGER_COLORS).length;
+    MANAGER_COLORS[manager] = MANAGER_PALETTE[used % MANAGER_PALETTE.length];
   }
   return MANAGER_COLORS[manager];
 }
-
-// Pre-assign colors to existing managers in stable order
-const existingManagers = [...new Set(ELEVATORS_RAW.map(e => e.manager).filter(Boolean))].sort();
-existingManagers.forEach(m => getManagerColor(m));
 
 // ═══ STATE ═══
 let ELEVATORS = ELEVATORS_RAW.filter(e => e.lat && e.lng);
@@ -666,20 +671,29 @@ function applyMarkerStyle(marker, color, radius) {
 
 function assignManagerToElevator(e, managerName, marker) {
   e.manager = managerName;
+  // Ensure color is registered before anything else
   const color = getManagerColor(managerName);
-  // Apply style immediately and directly
-  marker.setStyle({ fillColor: color, color: 'rgba(255,255,255,0.7)', weight: 2, fillOpacity: 1, opacity: 1 });
-  marker.setRadius(7);
+  // Update marker color directly on SVG element
+  marker.setStyle({
+    fillColor: color,
+    color: 'rgba(255,255,255,0.7)',
+    weight: 2,
+    fillOpacity: 1,
+    opacity: 1
+  });
+  // Refresh popup content
   marker.setPopupContent(buildPopup(e));
+  // Refresh sidebar and legend
   buildManagerButtons();
-  // Rebuild sidebar list
+  // Refresh list (do NOT remove/add layer — just restyle)
   updateFilters();
+  // Save to JSONbin
   saveToStorage();
-  // Flash — run after updateFilters so it's not overwritten
+  // Flash effect last so updateFilters doesn't override it
   setTimeout(function() {
     marker.setRadius(13);
     setTimeout(function() { marker.setRadius(7); }, 500);
-  }, 10);
+  }, 50);
 }
 
 // ═══ LOCALSTORAGE ═══
@@ -722,12 +736,21 @@ function loadFromStorage() {
         count++;
       }
     });
-    buildManagerButtons();
+    // Re-init colors AFTER all managers are loaded
+    initManagerColors();
+    // Restyle all markers with correct colors
     markers.forEach(({marker, elevator}) => {
       const color = getManagerColor(elevator.manager);
-      marker.setStyle({ fillColor: color, color: 'rgba(255,255,255,0.7)', weight: 2, fillOpacity: 1, opacity: 1 });
+      marker.setStyle({
+        fillColor: color,
+        color: 'rgba(255,255,255,0.7)',
+        weight: 2,
+        fillOpacity: 1,
+        opacity: 1
+      });
       marker.setPopupContent(buildPopup(elevator));
     });
+    buildManagerButtons();
     updateFilters();
     showSaveToast('Загружено: ' + count + ' назначений');
   })
@@ -944,6 +967,7 @@ function exportData() {
 document.getElementById('searchInput').addEventListener('input', e => { searchQuery=e.target.value.toLowerCase().trim(); updateFilters(); });
 
 // ═══ INIT ═══
+initManagerColors();
 buildManagerButtons();
 buildRegionFilter();
 initDistrictFilter();
